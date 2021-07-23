@@ -31,6 +31,7 @@ export const Container = styled.div`
             a{
                 svg{
                     color: var(--input-text-color);
+
                     &:hover{
                         color: var(--btn-color);
                     }
