@@ -1,6 +1,6 @@
 import getValidationErrors from '../../utils/getValidationErrors';
 import { FiChevronRight, FiXCircle } from 'react-icons/fi';
-import { Link } from 'react-router-dom';
+import { Link, useHistory } from 'react-router-dom';
 import { useState, useRef, useCallback } from 'react';
 import { FormHandles } from '@unform/core';
 import ReactModal from 'react-modal';
@@ -13,34 +13,80 @@ import Input from '../../components/Input';
 import Button from '../../components/Button';
 
 import { Container, Content, Card } from './styles';
+import api from '../../services/api';
+import { useEffect } from 'react';
+import { useToast } from '../../hooks/toast';
+
+interface EventFormData{
+    id?: string;
+    title: string;
+    date: string;
+    locale: string;
+}
 
 export default function Schedule() {
     const [isOpenModal, setIsOpenModal] = useState(false);
     const formRef = useRef<FormHandles>(null);
+    const history = useHistory();
+    const token = localStorage.getItem('@savetheday:token');
+    const [events, setEvents] = useState<EventFormData[]>([]);
+    const { addToast } = useToast();
 
-    const handleSubmit = useCallback(async (data: object) => {
+    const handleSubmit = useCallback(async (data: EventFormData) => {
         try {
             formRef.current?.setErrors({});
 
             const schema = Yup.object().shape({
-                event: Yup.string().required('Banco obrigatório'),
-                date_event: Yup.string().required('Agência obrigatório'),
-                local: Yup.string().required('Conta obrigatório'),
+                title: Yup.string().required('Nome do evento obrigatório'),
+                date: Yup.string().required('Data do evento obrigatório'),
+                locale: Yup.string().required('Local do evento obrigatório'),
             });
 
             await schema.validate(data, {
                 abortEarly: false
             });
-        } catch (err) {
-            const errors = getValidationErrors(err);
 
-            formRef.current?.setErrors(errors);
+            api.defaults.headers.authorization = `Bearer ${token}`;
+
+            await api.post('/events', data);
+
+            setIsOpenModal(false);
+
+            setEvents([...events, data]);
+
+            addToast({
+                type: 'success',
+                title: 'Cadastro realizado com sucesso',
+            });
+
+        } catch (err) {
+            if (err instanceof Yup.ValidationError) {
+                const errors = getValidationErrors(err);
+
+                formRef.current?.setErrors(errors);
+
+                return;
+            }
+
+            addToast({
+                type: 'error',
+                title: 'Erro no cadastro',
+                description: 'Ocorreu um erro tentar adicionar evento, tente novamente.',
+            });
         }
-    }, []);
+    }, [history, token]);
 
     const handleOpenModal = useCallback(() => {
         setIsOpenModal(!isOpenModal);
     }, [isOpenModal]);
+
+    useEffect(() => {
+        api.defaults.headers.authorization = `Bearer ${token}`;
+
+        api.get('events').then((response) => {
+            setEvents(response.data);
+        });
+     }, [token]);
 
     return (
         <Container>
@@ -49,21 +95,23 @@ export default function Schedule() {
                 <Header title="Eventos" btnText="Adicionar eventos" openModal={handleOpenModal} />
                 <main>
 
-                    <Card>
-                        <div>
-                            <span>Evento</span>
-                            <strong>Festa do milho</strong>
-                        </div>
-                        <div>
-                            <span>Data do evento</span>
-                            <strong>21/05/2021</strong>
-                        </div>
-                        <div>
-                            <span>Local</span>
-                            <strong>Praça da matriz</strong>
-                        </div>
-                        <Link to="/edit"><FiChevronRight size="30" /></Link>
-                    </Card>
+                    {events.map((event) => (
+                        <Card key={event.id}>
+                            <div>
+                                <span>Evento</span>
+                                <strong>{ event.title}</strong>
+                            </div>
+                            <div>
+                                <span>Data do evento</span>
+                                <strong>{ event.date }</strong>
+                            </div>
+                            <div>
+                                <span>Local</span>
+                                <strong>{ event.locale }</strong>
+                            </div>
+                            <Link to="/edit"><FiChevronRight size="30" /></Link>
+                        </Card>
+                    ))}
                 </main>
 
                 <ReactModal
@@ -85,9 +133,9 @@ export default function Schedule() {
                     ><FiXCircle size={30} color="#C83E4D" /></button>
 
                     <Form ref={formRef} onSubmit={handleSubmit}>
-                        <Input name="event" label="Nome do evento" />
-                        <Input type="date" name="date_event" label="Data do evento" />
-                        <Input name="local" label="Local do evento" />
+                        <Input name="title" label="Nome do evento" />
+                        <Input type="date" name="date" label="Data do evento" />
+                        <Input name="locale" label="Local do evento" />
 
                         <Button>Adicionar</Button>
                     </Form>
